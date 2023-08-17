@@ -1,0 +1,5 @@
+merkkijono = input("anna merkkijono: ")
+alijono = input("anna alijono: ")
+ensinmäinenlöytö = merkkijono.find(alijono)
+toinenlöytö = merkkijono.find(alijono,ensinmäinenlöytö+1)
+print("alijonon",alijono,"toinen esiintymä löytyy merkkijonosta",merkkijono, "indeksistä" ,toinenlöytö,"alkaen")
