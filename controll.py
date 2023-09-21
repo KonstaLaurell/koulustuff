@@ -1,6 +1,6 @@
 import pygame
 
-def kontrolli(hahmot, tapahtuma, nopeus):
+def kontrolli(hahmot, tapahtuma, nopeus ):
 
     pressed = pygame.key.get_pressed()
     if pressed[pygame.K_RIGHT]:
