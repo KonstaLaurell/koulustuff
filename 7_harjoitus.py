@@ -44,8 +44,8 @@ if len(lotto_rivi) == 7:
             kuusi_oikein += 1
         elif oikein_lkm == 7:
             seitseman_oikein += 1
-    else:
-        print("not 7 lenght")
+else:
+    print("not 7 lenght")
 
 print(f"{nelja_oikein} kertaa neljä oikein!")
 print(f"{viisi_oikein} kertaa viisi oikein!")
