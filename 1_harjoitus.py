@@ -74,6 +74,7 @@ def train(model, data, lr=0.001):
             # Update the plot
 
             print(f"Epoch {epoch + 1} completed. Average loss: {avg_loss:.4f}")
+            print(f"Epoch {epoch + 1} completed. Average loss: {losses:.4f}")
             epoch += 1
     except KeyboardInterrupt:
         print("Training interrupted.")
