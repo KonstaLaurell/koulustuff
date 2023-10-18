@@ -22,10 +22,15 @@ viisi_oikein = 0
 kuusi_oikein = 0
 seitseman_oikein = 0
 monta_kertaa = 0
+cost = 5
 
+win4 = 10
+win5 = 50
+win6 = 5000
+win7 = 7000000
 
 if len(lotto_rivi) == 7:
-    for i in range(montako):
+    while seitseman_oikein != 10:
         voittavatnumerot = []
 
         while len(voittavatnumerot) < 7: 
@@ -44,12 +49,24 @@ if len(lotto_rivi) == 7:
             kuusi_oikein += 1
         elif oikein_lkm == 7:
             seitseman_oikein += 1
-    else:
-        print("not 7 lenght")
-
+else:
+    print("not 7 lenght")
+nelja_voitot = nelja_oikein * win4
+viisi_voitot = viisi_oikein * win5
+kuusi_voitot = kuusi_oikein * win6
+seitseman_voitot = seitseman_oikein * win7
+makso = monta_kertaa * cost
+voitot =  (nelja_voitot+viisi_voitot+kuusi_voitot+seitseman_voitot)-makso
 print(f"{nelja_oikein} kertaa neljä oikein!")
+print(f"ja voitit {nelja_voitot}$")
 print(f"{viisi_oikein} kertaa viisi oikein!")
+print(f"ja voitit {viisi_voitot}$")
 print(f"{kuusi_oikein} kertaa kuusi oikein!")
-print(f"{seitseman_oikein} kertaa seitsemän oikein!")     
-print(f"arvottiin {monta_kertaa} kertaa")   
-    
+print(f"ja voitit {kuusi_voitot}$")
+print(f"{seitseman_oikein} kertaa seitsemän oikein!")  
+print(f"ja voitit {seitseman_voitot}$")   
+print(f"arvottiin {monta_kertaa} kertaa")
+print(f"maksoit {makso}$")
+print(f"voitit {voitot}$")
+
+
