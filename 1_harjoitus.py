@@ -1,144 +1,93 @@
-import chess
-import chess.pgn
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import random
-import matplotlib.pyplot as plt
-import threading
-import os
+import chess
+import numpy as np
 
-# ChessNet Neural Network
+# Neural Network for Policy and Value Estimation
 class ChessNet(nn.Module):
     def __init__(self):
         super(ChessNet, self).__init__()
-        print("Initializing ChessNet...")
-        self.fc1 = nn.Linear(8*8*12, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 1)
-        print("ChessNet initialized.")
+        self.conv1 = nn.Conv2d(12, 128, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
+        self.policy_head = nn.Sequential(
+            nn.Conv2d(128, 2, kernel_size=1),
+            nn.Flatten(),
+            nn.Linear(2*8*8, 4672)
+        )
+        self.value_head = nn.Sequential(
+            nn.Conv2d(128, 1, kernel_size=1),
+            nn.Flatten(),
+            nn.Linear(8*8, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Tanh()
+        )
 
     def forward(self, x):
-        return torch.tanh(self.fc3(torch.relu(self.fc2(torch.relu(self.fc1(x))))))
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        policy = torch.softmax(self.policy_head(x), dim=1)
+        value = self.value_head(x)
+        return policy, value
 
-# MCTS thread function
-def mcts_thread(board, model, best_move):
-    print("Starting MCTS...")
-    legal_moves = list(board.legal_moves)
-    if legal_moves:
-        move = random.choice(legal_moves)
-        best_move[0] = move
-    print(f"MCTS completed. Selected move: {best_move[0]}")
+def board_to_input(board):
+    labels = [
+        chess.PAWN, chess.ROOK, chess.KNIGHT, chess.BISHOP, chess.QUEEN, chess.KING,
+        -chess.PAWN, -chess.ROOK, -chess.KNIGHT, -chess.BISHOP, -chess.QUEEN, -chess.KING
+    ]
+    arr = np.zeros((12, 8, 8), dtype=int)
+    for piece, value in zip(labels, range(12)):
+        for i in board.pieces(piece, chess.WHITE if piece > 0 else chess.BLACK):
+            arr[value][np.unravel_index(i, (8, 8))] = 1
+    return torch.tensor(arr).float().unsqueeze(0)
 
-# Convert board to tensor
-def board_to_tensor(board):
-    return torch.randn(8*8*12)
-
-# Convert result string to float
-def result_to_float(result):
-    return {'1-0': 1.0, '0-1': -1.0, '1/2-1/2': 0.0}.get(result, 0.0)
-
-# Load a pre-trained model
-def load_model(model, path="chess_model.pth"):
-    if os.path.exists(path):
-        print(f"Loading model from {path}...")
-        model.load_state_dict(torch.load(path))
-        model.eval()
-        print("Model loaded successfully!")
-    else:
-        print("No pre-trained model found. Starting from scratch...")
-
-# Training function
-def train(model, data, lr=0.001):
-    print("Training ChessNet...")
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
-    losses = []
-    epoch = 0
-    try:
-        while True:  # Infinite loop
-            print(f"Starting epoch {epoch + 1}...")
-            total_loss = 0
-            for board, result in data:
-                board_tensor = board_to_tensor(board)
-                optimizer.zero_grad()
-                output = model(board_tensor)
-                target = result_to_float(result)
-                loss = criterion(output, torch.tensor([target]))
-                loss.backward()
-                optimizer.step()
-                total_loss += loss.item()
-            avg_loss = total_loss / len(data)
-            losses.append(avg_loss)
-
-            # Update the plot
-
-            print(f"Epoch {epoch + 1} completed. Average loss: {avg_loss:.4f}")
-            print(f"Epoch {epoch + 1} completed. Average loss: {losses:.4f}")
-            epoch += 1
-    except KeyboardInterrupt:
-        print("Training interrupted.")
-    return losses
-
-# Save games to PGN
-def save_games_to_pgn(games, file_path='games.pgn'):
-    print(f"Saving games to {file_path}...")
-    with open(file_path, 'w') as pgn_file:
-        for game in games:
-            pgn_file.write(str(game) + "\n\n")
-    print("Games saved successfully!")
-
-# Self-play loop with timeout mechanism and PGN saving
-def self_play(model, num_games=100, think_time=2.0):
-    print(f"Starting self-play for {num_games} games...")
-    data = []
-    outcomes = {"1-0": 0, "0-1": 0, "1/2-1/2": 0}
-    games_pgn = []
-    for i in range(num_games):
-        print(f"Playing game {i + 1}/{num_games}...")
+# Training Loop
+def self_play_and_train(model, optimizer, episodes=5, mcts_searches=10):
+    for episode in range(episodes):
         board = chess.Board()
-        game_pgn = chess.pgn.Game()
+        value = 0.0
         while not board.is_game_over():
-            best_move = [None]
-            search_thread = threading.Thread(target=mcts_thread, args=(board, model, best_move))
-            search_thread.start()
-            search_thread.join(timeout=think_time)
-            if best_move[0] and best_move[0] in board.legal_moves:
-                board.push(best_move[0])
-                game_pgn.add_variation(best_move[0])
-        result = board.result()
-        outcomes[result] += 1
-        for move in board.move_stack:
-            board.pop()
-            data.append((board.copy(), result))
-        games_pgn.append(game_pgn)
-        print(f"Game {i + 1} completed with result: {result}")
-    print(f"Self-play completed. Outcomes: {outcomes}")
-    return data, outcomes, games_pgn
+            policy, _ = model(board_to_input(board))
+            move = chess.Move.from_uci(chess.SQUARE_NAMES[np.argmax(policy.detach().numpy())])
+            if move not in board.legal_moves:
+                move = np.random.choice(list(board.legal_moves))
+            board.push(move)
 
-# Save model function
-def save_model(model, path="chess_model.pth"):
-    print(f"Saving trained model to {path}...")
-    torch.save(model.state_dict(), path)
-    print("Model saved successfully!")
+            print(board)  # Printing the board after every move
+
+        # Calculate the result of the game
+        result = board.result()
+        if result == "1-0":
+            value = 1
+        elif result == "0-1":
+            value = -1
+        else:
+            value = 0  # draw
+        
+        policy, board_value = model(board_to_input(board))
+        optimizer.zero_grad()
+        loss = nn.MSELoss()(board_value, torch.tensor([[value]])) - torch.log(policy[0][chess.SQUARE_NAMES.index(move.uci())] + 1e-5)
+        loss.backward()
+        optimizer.step()
+
+        print(f"Episode {episode + 1}, Value: {board_value.item()}, Loss: {loss.item()}")
+
+# Save Model
+def save_model(model, filepath="chess_model.pth"):
+    torch.save(model.state_dict(), filepath)
+    print(f"Model saved to {filepath}")
+
+# Load Model
+def load_model(filepath="chess_model.pth"):
+    model = ChessNet()
+    model.load_state_dict(torch.load(filepath))
+    model.eval()
+    print(f"Model loaded from {filepath}")
+    return model
 
 # Main
-if __name__ == "__main__":
-    model = ChessNet()
-    load_model(model)
-
-    print("\n--- Starting Self-Play ---")
-    data, outcomes, games_pgn = self_play(model)
-
-   
-
-
-    print("\n--- Starting Training ---")
-    try:
-        losses = train(model, data)
-    except KeyboardInterrupt:
-        print("Training stopped.")
-
-    print("\n--- Saving Model and Games ---")
-    save_model(model)
-
+model = ChessNet()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+self_play_and_train(model, optimizer)
+save_model(model)

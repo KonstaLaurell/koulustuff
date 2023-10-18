@@ -1,64 +1,100 @@
 import chess
+import chess.pgn
 import torch
 import torch.nn as nn
+import torch.optim as optim
+import random
+import os
 
-# Neural Network Definition
+# ChessNet definition goes here (same as before)...
 class ChessNet(nn.Module):
     def __init__(self):
         super(ChessNet, self).__init__()
-        self.fc1 = nn.Linear(8*8*12, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 1)
+        self.conv1 = nn.Conv2d(12, 64, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(8*8*128, 256)
+        self.fc2 = nn.Linear(256, 1)
 
     def forward(self, x):
-        return torch.tanh(self.fc3(torch.relu(self.fc2(torch.relu(self.fc1(x))))))
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(-1, 8*8*128)
+        x = torch.relu(self.fc1(x))
+        return torch.tanh(self.fc2(x))
+# Load model
+model = ChessNet()
+model_path = "model.pth"
+model.load_state_dict(torch.load(model_path))
+model.eval()
 
 def board_to_tensor(board):
-    # Placeholder: This should convert a board to a tensor representation
-    # You can replace this with the actual implementation
-    return torch.randn(8*8*12)
+    # Convert the board state to tensor (same as before)...
+    pass
 
-def mcts_predict_move(board, model):
+def evaluate_position(board):
+    tensor = board_to_tensor(board)
+    with torch.no_grad():
+        return model(tensor).item()
+
+def mcts_search(board, playouts=1000):
+    wins = {}
+    plays = {}
+    
+    for _ in range(playouts):
+        visited_states = set()
+        current_board = board.copy()
+        
+        while not current_board.is_game_over():
+            legal_moves = list(current_board.legal_moves)
+            
+            if tuple(current_board.board_fen()) not in plays:
+                break
+            
+            move_visits = [
+                plays.get((tuple(current_board.board_fen()), move.uci()), 0)
+                for move in legal_moves
+            ]
+            
+            if sum(move_visits) == 0:
+                move = random.choice(legal_moves)
+            else:
+                move_scores = [
+                    (wins[(tuple(current_board.board_fen()), move.uci())] / plays[(tuple(current_board.board_fen()), move.uci())])
+                    for move in legal_moves
+                ]
+                move = legal_moves[move_scores.index(max(move_scores))]
+                
+            current_board.push(move)
+            visited_states.add((tuple(current_board.board_fen()), move.uci()))
+        
+        winner = evaluate_position(current_board)
+        
+        for state in visited_states:
+            plays[state] = plays.get(state, 0) + 1
+            wins[state] = wins.get(state, 0) + winner
+    
     legal_moves = list(board.legal_moves)
-    best_move = None
-    best_value = float('-inf')
-    for move in legal_moves:
-        board.push(move)
-        board_tensor = board_to_tensor(board)
-        value = model(board_tensor).item()
-        board.pop()
-        if value > best_value:
-            best_value = value
-            best_move = move
+    move_scores = [(wins[(tuple(board.board_fen()), move.uci())] / plays[(tuple(board.board_fen()), move.uci())])
+                   if (tuple(board.board_fen()), move.uci()) in plays else 0 for move in legal_moves]
+    
+    best_move = legal_moves[move_scores.index(max(move_scores))]
     return best_move
 
-def play_against_ai(model_path="chess_model.pth"):
-    model = ChessNet()
-    model.load_state_dict(torch.load(model_path))
-    model.eval()
-
+def play():
     board = chess.Board()
-    print(board)
-
+    
     while not board.is_game_over():
-        if board.turn == chess.WHITE:  # Assume the user plays as WHITE
-            move_uci = input("Enter your move in UCI format (e.g. e2e4): ")
-            move = chess.Move.from_uci(move_uci)
-            if move in board.legal_moves:
-                board.push(move)
-            else:
-                print("Illegal move. Try again.")
-                continue
-        else:  # AI's turn
-            print("AI is thinking...")
-            move = mcts_predict_move(board, model)
-            print(f"AI's move: {move.uci()}")
-            board.push(move)
-
         print(board)
-
-    print("Game Over!")
-    print(f"Result: {board.result()}")
+        if board.turn == chess.WHITE:
+            move = input("Your move as WHITE (e.g. e2e4): ")
+        else:
+            print("AI thinking...")
+            move = mcts_search(board).uci()
+            print(f"AI plays: {move}")
+        board.push(chess.Move.from_uci(move))
+        
+    print("Game Over.")
+    print(board.result())
 
 if __name__ == "__main__":
-    play_against_ai()
+    play()
