@@ -54,15 +54,6 @@ def train(model, data, lr=0.001):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     losses = []
-
-    # Create an interactive plot
-    plt.ion()
-    fig, ax = plt.subplots()
-    fig.patch.set_facecolor('lightgray')
-    ax.set_facecolor('lightgray')
-    ax.set_xlabel('Epochs')
-    ax.set_ylabel('Loss')
-
     epoch = 0
     try:
         while True:  # Infinite loop
@@ -81,11 +72,6 @@ def train(model, data, lr=0.001):
             losses.append(avg_loss)
 
             # Update the plot
-            ax.clear()
-            ax.plot(losses, color='blue')
-            ax.set_title(f'Training Loss over Epochs (Current Epoch: {epoch + 1})')
-            plt.draw()
-            plt.pause(0.1)
 
             print(f"Epoch {epoch + 1} completed. Average loss: {avg_loss:.4f}")
             epoch += 1
@@ -102,7 +88,7 @@ def save_games_to_pgn(games, file_path='games.pgn'):
     print("Games saved successfully!")
 
 # Self-play loop with timeout mechanism and PGN saving
-def self_play(model, num_games=10, think_time=2.0):
+def self_play(model, num_games=100, think_time=2.0):
     print(f"Starting self-play for {num_games} games...")
     data = []
     outcomes = {"1-0": 0, "0-1": 0, "1/2-1/2": 0}
@@ -143,18 +129,8 @@ if __name__ == "__main__":
     print("\n--- Starting Self-Play ---")
     data, outcomes, games_pgn = self_play(model)
 
-    print("\n--- Plotting Game Outcomes ---")
-    plt.ion()  # Turn on interactive mode
-    labels = list(outcomes.keys())
-    values = [outcomes[key] for key in labels]
-    fig, ax = plt.subplots()
-    fig.patch.set_facecolor('lightgray')
-    ax.set_facecolor('lightgray')
-    ax.bar(labels, values, color=['white', 'gray', 'black'])
-    ax.set_title("Game Outcomes")
-    ax.set_ylabel("Number of Games")
-    plt.draw()
-    plt.pause(0.1)  # Pause to allow the plot to be drawn
+   
+
 
     print("\n--- Starting Training ---")
     try:
@@ -164,6 +140,4 @@ if __name__ == "__main__":
 
     print("\n--- Saving Model and Games ---")
     save_model(model)
-    save_games_to_pgn(games_pgn)
 
-    plt.show()
